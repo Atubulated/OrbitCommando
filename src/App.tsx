@@ -35,12 +35,43 @@ export default function App() {
   // Read from local storage on boot, default to true if it's the first time
   const [sfxEnabled, setSfxEnabled] = useState(() => localStorage.getItem('sfx') !== 'false');
   const [bgmEnabled, setBgmEnabled] = useState(() => localStorage.getItem('bgm') !== 'false');
-
-  // Save to local storage whenever the user changes a setting
+  
   useEffect(() => {
     localStorage.setItem('sfx', sfxEnabled.toString());
     localStorage.setItem('bgm', bgmEnabled.toString());
   }, [sfxEnabled, bgmEnabled]);
+  
+  // --- BACKGROUND MUSIC & VISIBILITY ENGINE ---
+  useEffect(() => {
+    // 1. Handle minimizing the app/switching tabs
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        bgmSound.pause();
+      } else {
+        if (bgmEnabled && (currentScreen === 'menu' || currentScreen === 'leaderboard' || currentScreen === 'intro')) {
+          bgmSound.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // 2. Handle normal screen navigation
+    if (!bgmEnabled) { 
+      bgmSound.pause(); 
+    } else if (!document.hidden) {
+      if (currentScreen === 'menu' || currentScreen === 'leaderboard') {
+        bgmSound.volume = 0.4;
+        bgmSound.play().catch(() => {});
+      } else if (currentScreen === 'intro') {
+        bgmSound.volume = 0.15; 
+        bgmSound.play().catch(() => {});
+      } else {
+        bgmSound.pause();
+      }
+    }
+
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [bgmEnabled, currentScreen]);
   
   const [bootLine1, setBootLine1] = useState('');
   const [bootLine2, setBootLine2] = useState('');

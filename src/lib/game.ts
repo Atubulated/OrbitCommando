@@ -1,6 +1,7 @@
 export interface GameHandle {
   destroy: () => void;
   setMobileInput?: (dx: number, dy: number, firing: boolean) => void;
+  togglePause?: (paused: boolean) => void;
 }
 
 interface Callbacks {
@@ -20,7 +21,6 @@ interface Powerup {
 export function startGame(
   canvas: HTMLCanvasElement,
   callbacks: Callbacks,
-  // Added isConnected to the config
   config: { colorHex: string, sfxEnabled: boolean, highScore: number, isConnected?: boolean }
 ): GameHandle {
   const sfxEnabled = config.sfxEnabled;
@@ -51,6 +51,7 @@ export function startGame(
 
   let gameState: 'playing' | 'gameover' = 'playing'; 
   let isRunning = true;
+  let isPaused = false; 
   
   let score = 0;
   let lastTime = performance.now();
@@ -69,7 +70,6 @@ export function startGame(
   let nextPowerupThreshold = 2000;
   const powerups: Powerup[] = [];
 
-  // These still track math silently in the background!
   let killStreak = 0;
   let comboTimer = 0;
   let comboMultiplier = 1;
@@ -87,7 +87,7 @@ export function startGame(
   };
 
   const playSynthShoot = () => {
-    if (!sfxEnabled) return;
+    if (!sfxEnabled || isPaused) return;
     const ctx = getAudioCtx();
     if (!ctx) return;
     try {
@@ -160,7 +160,7 @@ export function startGame(
   };
 
   const playSynthAlarmTone = (isHigh: boolean) => {
-    if (!sfxEnabled) return;
+    if (!sfxEnabled || isPaused) return;
     const ctx = getAudioCtx();
     if (!ctx) return;
     try {
@@ -299,217 +299,220 @@ export function startGame(
     const dt = time - lastTime;
     lastTime = time;
 
-    [...layer1, ...layer2, ...layer3].forEach(star => {
-      star.y += star.speed;
-      if (star.y > canvas.height) { star.y = 0; star.x = Math.random() * canvas.width; }
-    });
-    nebulae.forEach(neb => {
-      neb.y += neb.speed;
-      if (neb.y > canvas.height + neb.size) { neb.y = -neb.size; neb.x = Math.random() * canvas.width; }
-    });
+    // --- PHYSICS BYPASS: We skip updates if the game is paused ---
+    if (!isPaused) {
+      [...layer1, ...layer2, ...layer3].forEach(star => {
+        star.y += star.speed;
+        if (star.y > canvas.height) { star.y = 0; star.x = Math.random() * canvas.width; }
+      });
+      nebulae.forEach(neb => {
+        neb.y += neb.speed;
+        if (neb.y > canvas.height + neb.size) { neb.y = -neb.size; neb.x = Math.random() * canvas.width; }
+      });
 
-    if (screenShake > 0) screenShake -= dt;
+      if (screenShake > 0) screenShake -= dt;
 
-    if (iFrameTimer > 0) iFrameTimer -= dt;
-    if (shieldTimer > 0) shieldTimer -= dt;
+      if (iFrameTimer > 0) iFrameTimer -= dt;
+      if (shieldTimer > 0) shieldTimer -= dt;
 
-    if (comboTimer > 0) {
-      comboTimer -= dt;
-      if (comboTimer <= 0) comboMultiplier = 1; 
-    }
-
-    if (gameState === 'playing') {
-
-      if (player.hp <= 0 && !isPlayerDistressed && !isAwaitingFinalBlow) {
-        isPlayerDistressed = true;
-        isAwaitingFinalBlow = true; 
-        player.vx = (Math.random() - 0.5) * 2; 
-        player.vy = -0.5; 
-        window.dispatchEvent(new Event('playerDying'));
+      if (comboTimer > 0) {
+        comboTimer -= dt;
+        if (comboTimer <= 0) comboMultiplier = 1; 
       }
 
-      if (isPlayerDistressed) {
-        player.x += player.vx;
-        player.y += player.vy; 
-        player.vy += 0.005; 
-        if (player.y > canvas.height - 80) player.vy = 0;
+      if (gameState === 'playing') {
 
-        if (Math.random() < 0.4) {
-          triggerBomb(player.x + (Math.random()-0.5)*50, player.y + (Math.random()-0.5)*50, false, Math.random()*40 + 20, undefined, 'small');
-        }
-        
-        screenShake = 20; 
-
-        if (time - lastAlarmTime > 400) {
-          playSynthAlarmTone(isAlarmHighTone);
-          isAlarmHighTone = !isAlarmHighTone; 
-          lastAlarmTime = time;
-        }
-      }
-
-      if (!isPlayerDistressed && !isAwaitingFinalBlow) {
-        
-        if (keys.a) player.vx -= player.speed;
-        if (keys.d) player.vx += player.speed;
-
-        player.vx *= player.friction; 
-        if (player.vx > player.maxSpeed) player.vx = player.maxSpeed;
-        if (player.vx < -player.maxSpeed) player.vx = -player.maxSpeed;
-        
-        player.x += player.vx; 
-
-        player.x += mobileInput.dx * 1.5; 
-        
-        mobileInput.dx = 0;
-        mobileInput.dy = 0; 
-
-        player.y = canvas.height - 40;
-
-        if (player.x < player.size) { player.x = player.size; player.vx = 0; }
-        if (player.x > canvas.width - player.size) { player.x = canvas.width - player.size; player.vx = 0; }
-
-        if ((keys.space || mobileInput.firing) && time - lastShotTime > FIRE_COOLDOWN) {
-          projectiles.push({ x: player.x - 18, y: player.y - 10, vy: -24 }); 
-          projectiles.push({ x: player.x + 18, y: player.y - 10, vy: -24 });
-          lastShotTime = time;
-          playSynthShoot(); 
-        }
-      }
-
-      for (let i = projectiles.length - 1; i >= 0; i--) {
-        projectiles[i].y += projectiles[i].vy;
-        if (projectiles[i].y < 0) projectiles.splice(i, 1);
-      }
-
-      for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
-        const ep = enemyProjectiles[i];
-        ep.y += ep.vy;
-        const dist = Math.hypot(player.x - ep.x, player.y - ep.y);
-        
-        if (dist < player.size - 5 + 6 && !isPlayerDistressed && !isAwaitingFinalBlow) { 
-          takeDamage(15); 
-          enemyProjectiles.splice(i, 1); continue;
-        }
-        if (ep.y > canvas.height) enemyProjectiles.splice(i, 1);
-      }
-
-      for (let i = explosions.length - 1; i >= 0; i--) {
-        explosions[i].life -= dt;
-        if (explosions[i].life <= 0) explosions.splice(i, 1);
-      }
-
-      while (score >= nextPowerupThreshold) {
-        powerups.push({
-          x: Math.random() * (canvas.width - 60) + 30,
-          y: -30,
-          radius: 12,
-          speed: 1.5 + (Math.log(1 + score / 600) * 0.2)
-        });
-        nextPowerupThreshold += 2000;
-      }
-
-      for (let i = powerups.length - 1; i >= 0; i--) {
-        const p = powerups[i];
-        p.y += p.speed;
-
-        if (Math.hypot(player.x - p.x, player.y - p.y) < player.size + p.radius && !isPlayerDistressed) {
-          shieldTimer = 6000; 
-          playSynthPowerup();
-          powerups.splice(i, 1);
-          continue;
+        if (player.hp <= 0 && !isPlayerDistressed && !isAwaitingFinalBlow) {
+          isPlayerDistressed = true;
+          isAwaitingFinalBlow = true; 
+          player.vx = (Math.random() - 0.5) * 2; 
+          player.vy = -0.5; 
+          window.dispatchEvent(new Event('playerDying'));
         }
 
-        if (p.y > canvas.height + 30) {
-          powerups.splice(i, 1);
-        }
-      }
+        if (isPlayerDistressed) {
+          player.x += player.vx;
+          player.y += player.vy; 
+          player.vy += 0.005; 
+          if (player.y > canvas.height - 80) player.vy = 0;
 
-      const stage = Math.log(1 + score / 600);
-      const currentSpawnRate = Math.max(300, 1500 / (1 + stage));
-
-      if (time - lastEnemySpawn > currentSpawnRate && !isPlayerDistressed && !isAwaitingFinalBlow) {
-        
-        const speedBoost = Math.min(3.5, stage * 0.3); 
-        const eliteChance = Math.min(0.40, stage * 0.07); 
-        let baseHp = Math.random() > 0.7 ? 2 : 1; 
-        
-        if (Math.random() < eliteChance) {
-          baseHp = 3 + Math.floor(stage / 5); 
-        }
-
-        enemies.push({
-          x: Math.random() * (canvas.width - 80) + 40, y: -50, size: 34, 
-          speed: 1.5 + Math.random() * 1.5 + speedBoost, 
-          hp: baseHp,
-          imgIndex: Math.floor(Math.random() * enemyImages.length),
-          nextShotTime: time + 600 + Math.random() * 600,
-          shotWarning: false
-        });
-        lastEnemySpawn = time;
-      }
-
-      for (let i = enemies.length - 1; i >= 0; i--) {
-        const e = enemies[i];
-        e.y += e.speed;
-        
-        if (!e.shotWarning && time > e.nextShotTime - 500) {
-          e.shotWarning = true;
-        }
-
-        if (time > e.nextShotTime) {
-          e.shotWarning = false;
-          const bulletSpeedBoost = Math.min(4.5, stage * 0.45);
-          enemyProjectiles.push({ x: e.x, y: e.y + e.size, vy: e.speed + 3 + bulletSpeedBoost, type: 'laser' });
+          if (Math.random() < 0.4) {
+            triggerBomb(player.x + (Math.random()-0.5)*50, player.y + (Math.random()-0.5)*50, false, Math.random()*40 + 20, undefined, 'small');
+          }
           
-          const reloadTime = Math.max(450, 2200 * Math.pow(0.8, stage));
-          e.nextShotTime = time + reloadTime + Math.random() * (reloadTime * 0.4);
-        }
+          screenShake = 20; 
 
-        let destroyed = false;
-        for (let j = projectiles.length - 1; j >= 0; j--) {
-          const p = projectiles[j];
-          if (Math.hypot(p.x - e.x, p.y - e.y) < e.size + 5) { 
-            projectiles.splice(j, 1); e.hp--;
-            if (e.hp > 0) {
-              triggerBomb(p.x, p.y, false, 12, undefined, 'small'); 
-            } else {
-              destroyed = true; 
-              
-              if (comboTimer > 0) {
-                comboMultiplier = Math.min(4, comboMultiplier + 0.5);
-              } else {
-                comboMultiplier = 1.5; 
-              }
-              comboTimer = COMBO_WINDOW;
-
-              killStreak++;
-              if (killStreak % 10 === 0) {
-                player.hp = Math.min(player.maxHp, player.hp + 10);
-                playSynthHeal();
-              }
-
-              const pointsEarned = Math.floor(15 * comboMultiplier);
-              score += pointsEarned;
-              
-              // No longer overriding config.highScore dynamically!
-              callbacks.onScore(score);
-              
-              triggerBomb(e.x, e.y, false, 45, undefined, 'regular'); 
-              playSynthExplosion(false); 
-              break; 
-            }
+          if (time - lastAlarmTime > 400) {
+            playSynthAlarmTone(isAlarmHighTone);
+            isAlarmHighTone = !isAlarmHighTone; 
+            lastAlarmTime = time;
           }
         }
-        if (destroyed) { enemies.splice(i, 1); continue; }
-        
-        if (Math.hypot(player.x - e.x, player.y - e.y) < player.size + e.size - 15 && !isPlayerDistressed && !isAwaitingFinalBlow) { 
-          takeDamage(30); 
-          enemies.splice(i, 1); continue;
-        }
-        if (e.y > canvas.height + 50) enemies.splice(i, 1);
-      }
-    }
 
+        if (!isPlayerDistressed && !isAwaitingFinalBlow) {
+          
+          if (keys.a) player.vx -= player.speed;
+          if (keys.d) player.vx += player.speed;
+
+          player.vx *= player.friction; 
+          if (player.vx > player.maxSpeed) player.vx = player.maxSpeed;
+          if (player.vx < -player.maxSpeed) player.vx = -player.maxSpeed;
+          
+          player.x += player.vx; 
+
+          player.x += mobileInput.dx * 1.5; 
+          
+          mobileInput.dx = 0;
+          mobileInput.dy = 0; 
+
+          player.y = canvas.height - 40;
+
+          if (player.x < player.size) { player.x = player.size; player.vx = 0; }
+          if (player.x > canvas.width - player.size) { player.x = canvas.width - player.size; player.vx = 0; }
+
+          if ((keys.space || mobileInput.firing) && time - lastShotTime > FIRE_COOLDOWN) {
+            projectiles.push({ x: player.x - 18, y: player.y - 10, vy: -24 }); 
+            projectiles.push({ x: player.x + 18, y: player.y - 10, vy: -24 });
+            lastShotTime = time;
+            playSynthShoot(); 
+          }
+        }
+
+        for (let i = projectiles.length - 1; i >= 0; i--) {
+          projectiles[i].y += projectiles[i].vy;
+          if (projectiles[i].y < 0) projectiles.splice(i, 1);
+        }
+
+        for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+          const ep = enemyProjectiles[i];
+          ep.y += ep.vy;
+          const dist = Math.hypot(player.x - ep.x, player.y - ep.y);
+          
+          if (dist < player.size - 5 + 6 && !isPlayerDistressed && !isAwaitingFinalBlow) { 
+            takeDamage(15); 
+            enemyProjectiles.splice(i, 1); continue;
+          }
+          if (ep.y > canvas.height) enemyProjectiles.splice(i, 1);
+        }
+
+        for (let i = explosions.length - 1; i >= 0; i--) {
+          explosions[i].life -= dt;
+          if (explosions[i].life <= 0) explosions.splice(i, 1);
+        }
+
+        while (score >= nextPowerupThreshold) {
+          powerups.push({
+            x: Math.random() * (canvas.width - 60) + 30,
+            y: -30,
+            radius: 12,
+            speed: 1.5 + (Math.log(1 + score / 600) * 0.2)
+          });
+          nextPowerupThreshold += 2000;
+        }
+
+        for (let i = powerups.length - 1; i >= 0; i--) {
+          const p = powerups[i];
+          p.y += p.speed;
+
+          if (Math.hypot(player.x - p.x, player.y - p.y) < player.size + p.radius && !isPlayerDistressed) {
+            shieldTimer = 6000; 
+            playSynthPowerup();
+            powerups.splice(i, 1);
+            continue;
+          }
+
+          if (p.y > canvas.height + 30) {
+            powerups.splice(i, 1);
+          }
+        }
+
+        const stage = Math.log(1 + score / 600);
+        const currentSpawnRate = Math.max(300, 1500 / (1 + stage));
+
+        if (time - lastEnemySpawn > currentSpawnRate && !isPlayerDistressed && !isAwaitingFinalBlow) {
+          
+          const speedBoost = Math.min(3.5, stage * 0.3); 
+          const eliteChance = Math.min(0.40, stage * 0.07); 
+          let baseHp = Math.random() > 0.7 ? 2 : 1; 
+          
+          if (Math.random() < eliteChance) {
+            baseHp = 3 + Math.floor(stage / 5); 
+          }
+
+          enemies.push({
+            x: Math.random() * (canvas.width - 80) + 40, y: -50, size: 34, 
+            speed: 1.5 + Math.random() * 1.5 + speedBoost, 
+            hp: baseHp,
+            imgIndex: Math.floor(Math.random() * enemyImages.length),
+            nextShotTime: time + 600 + Math.random() * 600,
+            shotWarning: false
+          });
+          lastEnemySpawn = time;
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          e.y += e.speed;
+          
+          if (!e.shotWarning && time > e.nextShotTime - 500) {
+            e.shotWarning = true;
+          }
+
+          if (time > e.nextShotTime) {
+            e.shotWarning = false;
+            const bulletSpeedBoost = Math.min(4.5, stage * 0.45);
+            enemyProjectiles.push({ x: e.x, y: e.y + e.size, vy: e.speed + 3 + bulletSpeedBoost, type: 'laser' });
+            
+            const reloadTime = Math.max(450, 2200 * Math.pow(0.8, stage));
+            e.nextShotTime = time + reloadTime + Math.random() * (reloadTime * 0.4);
+          }
+
+          let destroyed = false;
+          for (let j = projectiles.length - 1; j >= 0; j--) {
+            const p = projectiles[j];
+            if (Math.hypot(p.x - e.x, p.y - e.y) < e.size + 5) { 
+              projectiles.splice(j, 1); e.hp--;
+              if (e.hp > 0) {
+                triggerBomb(p.x, p.y, false, 12, undefined, 'small'); 
+              } else {
+                destroyed = true; 
+                
+                if (comboTimer > 0) {
+                  comboMultiplier = Math.min(4, comboMultiplier + 0.5);
+                } else {
+                  comboMultiplier = 1.5; 
+                }
+                comboTimer = COMBO_WINDOW;
+
+                killStreak++;
+                if (killStreak % 10 === 0) {
+                  player.hp = Math.min(player.maxHp, player.hp + 10);
+                  playSynthHeal();
+                }
+
+                const pointsEarned = Math.floor(15 * comboMultiplier);
+                score += pointsEarned;
+                
+                callbacks.onScore(score);
+                
+                triggerBomb(e.x, e.y, false, 45, undefined, 'regular'); 
+                playSynthExplosion(false); 
+                break; 
+              }
+            }
+          }
+          if (destroyed) { enemies.splice(i, 1); continue; }
+          
+          if (Math.hypot(player.x - e.x, player.y - e.y) < player.size + e.size - 15 && !isPlayerDistressed && !isAwaitingFinalBlow) { 
+            takeDamage(30); 
+            enemies.splice(i, 1); continue;
+          }
+          if (e.y > canvas.height + 50) enemies.splice(i, 1);
+        }
+      }
+    } // <-- End of physics bypass block
+
+    // --- DRAW LOGIC (Continues even when paused) ---
     ctx.fillStyle = "#020205"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     nebulae.forEach(neb => {
@@ -639,7 +642,6 @@ export function startGame(
         ctx.strokeStyle = ARMY_BASE;
         ctx.lineWidth = 2; ctx.strokeRect(pBarX, pBarY, pBarW, pBarH);
 
-        // --- NEW SHIELD DURATION BAR ---
         if (shieldTimer > 0) {
           const shieldPct = Math.max(0, shieldTimer / 6000);
           const sBarY = pBarY + pBarH + 6; 
@@ -655,7 +657,6 @@ export function startGame(
           ctx.lineWidth = 1; ctx.strokeRect(pBarX, sBarY, pBarW, sBarH);
         }
 
-        // --- UPDATED SCORE HUD ---
         if (config.isConnected) {
           ctx.textAlign = "right";
           ctx.textBaseline = "top";
@@ -670,8 +671,19 @@ export function startGame(
         ctx.fillText(`SCORE: ${score}`, canvas.width - 20, config.isConnected ? 40 : 20);
         ctx.textAlign = "left";
         ctx.textBaseline = "alphabetic";
-
-        // ALL COMBO AND STREAK HUD RENDERING HAS BEEN REMOVED!
+      }
+      
+      // --- NEW PAUSED HUD OVERLAY ---
+      if (isPaused && gameState === 'playing') {
+        ctx.fillStyle = "rgba(10, 15, 10, 0.75)"; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = ARMY_LIGHT;
+        ctx.font = "bold 30px monospace";
+        ctx.fillText("[ PAUSED ]", canvas.width / 2, canvas.height / 2);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
       }
     }
     ctx.restore(); 
@@ -698,6 +710,9 @@ export function startGame(
       mobileInput.dx += dx;
       mobileInput.dy += dy;
       mobileInput.firing = firing;
+    },
+    togglePause: (paused: boolean) => {
+      isPaused = paused;
     }
   };
 }
