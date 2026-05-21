@@ -14,7 +14,6 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
   const finalSentRef = useRef(false);
 
   const lastTouch = useRef<{ x: number, y: number } | null>(null);
-  const [isFiringUI, setIsFiringUI] = useState(false);
   const isFiringRef = useRef(false);
 
   const [isPaused, setIsPaused] = useState(false);
@@ -62,7 +61,6 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
     const touch = e.touches[0];
     lastTouch.current = { x: touch.clientX, y: touch.clientY };
     isFiringRef.current = true;
-    setIsFiringUI(true);
     updateEngine(0, 0); 
   };
 
@@ -80,7 +78,6 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
   const handleTouchEnd = () => {
     lastTouch.current = null;
     isFiringRef.current = false;
-    setIsFiringUI(false);
     updateEngine(0, 0); 
   };
 
@@ -96,7 +93,6 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
             setIsPaused(nextState);
             if (nextState) {
               isFiringRef.current = false;
-              setIsFiringUI(false);
               updateEngine(0, 0);
             }
             handleRef.current?.togglePause?.(nextState);
@@ -128,22 +124,6 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
           onTouchCancel={handleTouchEnd}
         >
           <canvas ref={canvasRef} className="w-full h-full block pointer-events-none" />
-          
-          {isFiringUI && !isPaused && (
-            <div className="absolute top-[80px] left-1/2 -translate-x-1/2 pointer-events-none opacity-40 md:hidden">
-              <span className="text-[10px] text-[#a3b86c] font-bold tracking-[0.3em] animate-[pulse_0.5s_infinite]">
-                [ SLIDE TO STEER ]
-              </span>
-            </div>
-          )}
-
-          {!isFiringUI && !isPaused && (
-            <div className="absolute bottom-16 left-1/2 -translate-x-1/2 pointer-events-none md:hidden opacity-60 w-max">
-              <div className="text-[10px] text-[#a3b86c] font-bold tracking-widest border border-[#708238]/50 px-4 py-3 bg-black/80 rounded shadow-[0_0_15px_rgba(112,130,56,0.2)] animate-bounce">
-                [ HOLD AND DRAG ANYWHERE ]
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
