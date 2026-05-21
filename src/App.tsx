@@ -96,8 +96,11 @@ export default function App() {
 
     if (address && finalScore > 0) {
       const opId = address.slice(2, 7).toUpperCase(); 
+      
+      // Tell TypeScript to bypass strict ABI type-checking here
+      // @ts-ignore
       writeContract({
-        address: CONTRACT_ADDRESS,
+        address: CONTRACT_ADDRESS as `0x${string}`,
         abi: CommandoOrbitABI.abi, 
         functionName: 'submitGlobalScore',
         args: [opId, finalScore],
