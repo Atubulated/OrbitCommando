@@ -431,6 +431,7 @@ export default function App() {
               onGameOver={handleGameOver} 
               sfxEnabled={sfxEnabled} 
               highScore={personalBestScore} 
+              isConnected={isConnected} 
             />
           </div>
         )}

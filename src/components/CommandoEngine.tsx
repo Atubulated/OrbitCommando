@@ -5,17 +5,15 @@ interface CommandoEngineProps {
   onGameOver: (score: number) => void;
   sfxEnabled: boolean;
   highScore: number; 
+  isConnected: boolean; // <-- Added this
 }
 
-export default function CommandoEngine({ onGameOver, sfxEnabled, highScore }: CommandoEngineProps) {
+export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isConnected }: CommandoEngineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const handleRef = useRef<GameHandle | null>(null);
   const finalSentRef = useRef(false);
 
-  // We track the last touch position to calculate the delta (dx, dy)
   const lastTouch = useRef<{ x: number, y: number } | null>(null);
-  
-  // We use state for the UI indicator, and a ref for the fast game loop
   const [isFiringUI, setIsFiringUI] = useState(false);
   const isFiringRef = useRef(false);
 
@@ -34,11 +32,11 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore }: Co
           onGameOver(finalScore); 
         },
       },
-      { colorHex: "#708238", sfxEnabled, highScore } 
+      { colorHex: "#708238", sfxEnabled, highScore, isConnected } // <-- Passing it to the engine
     );
 
     return () => handleRef.current?.destroy();
-  }, [onGameOver, sfxEnabled, highScore]);
+  }, [onGameOver, sfxEnabled, highScore, isConnected]);
 
   // Push the exact pixel movement directly into the engine
   const updateEngine = (dx: number, dy: number) => {

@@ -20,7 +20,8 @@ interface Powerup {
 export function startGame(
   canvas: HTMLCanvasElement,
   callbacks: Callbacks,
-  config: { colorHex: string, sfxEnabled: boolean, highScore: number }
+  // Added isConnected to the config
+  config: { colorHex: string, sfxEnabled: boolean, highScore: number, isConnected?: boolean }
 ): GameHandle {
   const sfxEnabled = config.sfxEnabled;
   const _unusedColorHex = config.colorHex; 
@@ -55,27 +56,20 @@ export function startGame(
   let lastTime = performance.now();
   let screenShake = 0;
 
-  // --- DEATH STATE LOGIC ---
   let isPlayerDistressed = false; 
   let isAwaitingFinalBlow = false; 
 
-  // --- ALARM LOGIC ---
   let lastAlarmTime = 0;
   let isAlarmHighTone = true;
-
-  let currentHighScore = config.highScore; 
-  let hasBeatenHighScore = false;
-  let scoreFlashTimer = 0;
 
   let iFrameTimer = 0;
   const I_FRAME_DURATION = 400; 
 
-  // --- SHIELD POWERUP STATE ---
   let shieldTimer = 0;
-  // [UPDATE] Orb drops now trigger every 2000 score
   let nextPowerupThreshold = 2000;
   const powerups: Powerup[] = [];
 
+  // These still track math silently in the background!
   let killStreak = 0;
   let comboTimer = 0;
   let comboMultiplier = 1;
@@ -315,7 +309,6 @@ export function startGame(
     });
 
     if (screenShake > 0) screenShake -= dt;
-    if (scoreFlashTimer > 0) scoreFlashTimer -= dt;
 
     if (iFrameTimer > 0) iFrameTimer -= dt;
     if (shieldTimer > 0) shieldTimer -= dt;
@@ -337,7 +330,7 @@ export function startGame(
 
       if (isPlayerDistressed) {
         player.x += player.vx;
-        player.y += player.vy; // Death animation keeps vertical gravity
+        player.y += player.vy; 
         player.vy += 0.005; 
         if (player.y > canvas.height - 80) player.vy = 0;
 
@@ -356,7 +349,6 @@ export function startGame(
 
       if (!isPlayerDistressed && !isAwaitingFinalBlow) {
         
-        // [UPDATE] PC: Only process Left/Right keys
         if (keys.a) player.vx -= player.speed;
         if (keys.d) player.vx += player.speed;
 
@@ -366,13 +358,11 @@ export function startGame(
         
         player.x += player.vx; 
 
-        // [UPDATE] Mobile: Only process Horizontal delta
         player.x += mobileInput.dx * 1.5; 
         
         mobileInput.dx = 0;
-        mobileInput.dy = 0; // Discard Y input
+        mobileInput.dy = 0; 
 
-        // 👇 ADD THIS EXACT LINE TO ANCHOR THE SHIP TO THE TRENCH 👇
         player.y = canvas.height - 40;
 
         if (player.x < player.size) { player.x = player.size; player.vx = 0; }
@@ -408,8 +398,6 @@ export function startGame(
         if (explosions[i].life <= 0) explosions.splice(i, 1);
       }
 
-      // --- SHIELD POWERUP LOGIC ---
-      // [UPDATE] Check against the new 2000 threshold
       while (score >= nextPowerupThreshold) {
         powerups.push({
           x: Math.random() * (canvas.width - 60) + 30,
@@ -503,14 +491,9 @@ export function startGame(
               const pointsEarned = Math.floor(15 * comboMultiplier);
               score += pointsEarned;
               
+              // No longer overriding config.highScore dynamically!
               callbacks.onScore(score);
-              if (score > currentHighScore) {
-                currentHighScore = score;
-                if (!hasBeatenHighScore) {
-                  hasBeatenHighScore = true;
-                  scoreFlashTimer = 1500; 
-                }
-              }
+              
               triggerBomb(e.x, e.y, false, 45, undefined, 'regular'); 
               playSynthExplosion(false); 
               break; 
@@ -656,49 +639,39 @@ export function startGame(
         ctx.strokeStyle = ARMY_BASE;
         ctx.lineWidth = 2; ctx.strokeRect(pBarX, pBarY, pBarW, pBarH);
 
-        ctx.textAlign = "right";
-        ctx.textBaseline = "top";
-        ctx.fillStyle = ARMY_BASE; 
-        ctx.font = "bold 14px monospace";
-        ctx.fillText(`HI: ${currentHighScore}`, canvas.width - 20, 20);
-
-        let scoreColor = ARMY_LIGHT;
-        if (scoreFlashTimer > 0) {
-          scoreColor = Math.floor(time / 50) % 2 === 0 ? "#ffffff" : ARMY_LIGHT;
-          ctx.font = "bold 26px monospace"; 
-        } else {
-          ctx.font = "bold 20px monospace";
+        // --- NEW SHIELD DURATION BAR ---
+        if (shieldTimer > 0) {
+          const shieldPct = Math.max(0, shieldTimer / 6000);
+          const sBarY = pBarY + pBarH + 6; 
+          const sBarH = 6; 
+          
+          ctx.fillStyle = "rgba(10, 15, 10, 0.8)"; 
+          ctx.fillRect(pBarX, sBarY, pBarW, sBarH);
+          
+          ctx.fillStyle = "#60a5fa"; 
+          ctx.fillRect(pBarX, sBarY, pBarW * shieldPct, sBarH);
+          
+          ctx.strokeStyle = "#3b82f6";
+          ctx.lineWidth = 1; ctx.strokeRect(pBarX, sBarY, pBarW, sBarH);
         }
-        ctx.fillStyle = scoreColor;
-        ctx.fillText(`SCORE: ${score}`, canvas.width - 20, 40);
+
+        // --- UPDATED SCORE HUD ---
+        if (config.isConnected) {
+          ctx.textAlign = "right";
+          ctx.textBaseline = "top";
+          ctx.fillStyle = ARMY_BASE; 
+          ctx.font = "bold 14px monospace";
+          ctx.fillText(`HI: ${config.highScore}`, canvas.width - 20, 20);
+        }
+
+        ctx.textAlign = "right";
+        ctx.font = "bold 20px monospace";
+        ctx.fillStyle = ARMY_LIGHT;
+        ctx.fillText(`SCORE: ${score}`, canvas.width - 20, config.isConnected ? 40 : 20);
         ctx.textAlign = "left";
         ctx.textBaseline = "alphabetic";
 
-        if (comboMultiplier > 1) {
-          const comboAlpha = comboTimer < 500 ? comboTimer / 500 : 1;
-          ctx.save();
-          ctx.globalAlpha = comboAlpha;
-          ctx.textAlign = "left";
-          ctx.textBaseline = "top";
-          ctx.font = "bold 22px monospace";
-          ctx.fillStyle = comboMultiplier >= 3 ? "#f97316" : "#facc15";
-          ctx.fillText(`${comboMultiplier.toFixed(1)}x`, pBarX, pBarY + 20);
-          ctx.font = "bold 11px monospace";
-          ctx.fillStyle = "#a3b86c";
-          ctx.fillText("COMBO", pBarX, pBarY + 46);
-          ctx.restore();
-          ctx.textBaseline = "alphabetic";
-        }
-
-        if (killStreak > 0) {
-          ctx.textAlign = "left";
-          ctx.textBaseline = "top";
-          ctx.font = "bold 11px monospace";
-          ctx.fillStyle = "#708238";
-          const streakProgress = killStreak % 10;
-          ctx.fillText(`STREAK ${streakProgress}/10 ♥`, pBarX, pBarY + 60);
-          ctx.textBaseline = "alphabetic";
-        }
+        // ALL COMBO AND STREAK HUD RENDERING HAS BEEN REMOVED!
       }
     }
     ctx.restore(); 
