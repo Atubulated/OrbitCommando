@@ -17,7 +17,6 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
   const [isFiringUI, setIsFiringUI] = useState(false);
   const isFiringRef = useRef(false);
 
-  // --- NEW PAUSE STATE ---
   const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
@@ -41,7 +40,6 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
     return () => handleRef.current?.destroy();
   }, [onGameOver, sfxEnabled, highScore, isConnected]);
 
-  // --- AUTO-PAUSE ON MINIMIZE ---
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden && !finalSentRef.current) {
@@ -60,7 +58,7 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isPaused) return; // Block inputs while paused
+    if (isPaused) return; 
     const touch = e.touches[0];
     lastTouch.current = { x: touch.clientX, y: touch.clientY };
     isFiringRef.current = true;
@@ -90,7 +88,7 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
     <div className="h-full w-full bg-[#020205] flex justify-center items-center overflow-hidden font-mono select-none">
       <div className="w-full h-full max-w-[420px] flex flex-col bg-[#0a0a0a] shadow-[0_0_80px_rgba(112,130,56,0.07)] relative border-x border-[#708238]/20">
         
-        {/* --- PAUSE BUTTON --- */}
+        {/* --- PAUSE BUTTON (ICON) --- */}
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -103,11 +101,21 @@ export default function CommandoEngine({ onGameOver, sfxEnabled, highScore, isCo
             }
             handleRef.current?.togglePause?.(nextState);
           }}
-          className={`absolute top-[72px] right-4 z-50 px-3 py-1.5 border border-[#708238]/50 font-bold text-[10px] tracking-[0.2em] shadow-[0_0_10px_rgba(112,130,56,0.3)] transition-colors
+          className={`absolute top-[14px] right-4 z-50 p-1.5 rounded border border-[#708238]/50 shadow-[0_0_10px_rgba(112,130,56,0.3)] transition-colors
             ${isPaused ? 'bg-[#708238] text-black' : 'bg-black/80 text-[#a3b86c] active:bg-[#708238] active:text-black'}
           `}
         >
-          {isPaused ? "[ RESUME ]" : "[ PAUSE ]"}
+          {isPaused ? (
+            // Play Icon
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+            </svg>
+          ) : (
+            // Pause Icon
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+              <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 01.75-.75H9a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H7.5a.75.75 0 01-.75-.75V5.25zm7.5 0a.75.75 0 01.75-.75h1.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75h-1.5a.75.75 0 01-.75-.75V5.25z" clipRule="evenodd" />
+            </svg>
+          )}
         </button>
 
         {/* --- UNIVERSAL TOUCH ZONE --- */}

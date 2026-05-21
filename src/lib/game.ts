@@ -657,23 +657,29 @@ export function startGame(
           ctx.lineWidth = 1; ctx.strokeRect(pBarX, sBarY, pBarW, sBarH);
         }
 
-        if (config.isConnected) {
-          ctx.textAlign = "right";
-          ctx.textBaseline = "top";
-          ctx.fillStyle = ARMY_BASE; 
-          ctx.font = "bold 14px monospace";
-          ctx.fillText(`HI: ${config.highScore}`, canvas.width - 20, 20);
-        }
+        // --- ALIGNED SCORE HUD ---
+        const scoreX = canvas.width - 60; // Make room for HTML Pause button
 
         ctx.textAlign = "right";
+        ctx.textBaseline = "top"; // Align with the top edge of the Health Bar
+
+        // Primary Score
         ctx.font = "bold 20px monospace";
         ctx.fillStyle = ARMY_LIGHT;
-        ctx.fillText(`SCORE: ${score}`, canvas.width - 20, config.isConnected ? 40 : 20);
+        ctx.fillText(`SCORE: ${score}`, scoreX, 18); 
+
+        // Secondary HI Score (Only if connected)
+        if (config.isConnected) {
+          ctx.fillStyle = ARMY_BASE; 
+          ctx.font = "bold 14px monospace";
+          ctx.fillText(`HI: ${config.highScore}`, scoreX, 42); 
+        }
+
         ctx.textAlign = "left";
         ctx.textBaseline = "alphabetic";
       }
       
-      // --- NEW PAUSED HUD OVERLAY ---
+      // --- PAUSED HUD OVERLAY ---
       if (isPaused && gameState === 'playing') {
         ctx.fillStyle = "rgba(10, 15, 10, 0.75)"; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
