@@ -6,7 +6,7 @@ import { useConnect, useAccount, useDisconnect, useSwitchChain, useWriteContract
 import { injected } from 'wagmi/connectors';
 import CommandoOrbitABI from './abi/CommandoOrbit.json';
 
-const CONTRACT_ADDRESS = "0xF91bB3a85D90aF4c9A3fBeDBA51Fbbd0D16d9f13";
+const CONTRACT_ADDRESS = "0x3A1Ba6fEd9Bf3B409B9CE972e5f109C3E11a3258"; // "0xF91bB3a85D90aF4c9A3fBeDBA51Fbbd0D16d9f13";
 type AppState = 'boot' | 'intro' | 'menu' | 'playing' | 'death' | 'gameover' | 'leaderboard';
 
 const INTRO_DIALOGUE = [
@@ -114,9 +114,12 @@ export default function App() {
   }
 
   const personalBestScore = rawPersonalBest ? Number(rawPersonalBest) : 0;
+  
+  // Add this new state right above handleTransmitScore
+  const [isSigning, setIsSigning] = useState(false);
 
   // --- BLOCKCHAIN TRANSMIT FUNCTION ---
-  const handleTransmitScore = (e: React.MouseEvent) => {
+  const handleTransmitScore = async (e: React.MouseEvent) => {
     e.stopPropagation();
     playUIBlip();
 
@@ -128,14 +131,43 @@ export default function App() {
     if (address && finalScore > 0) {
       const opId = address.slice(2, 7).toUpperCase(); 
       
-      // Tell TypeScript to bypass strict ABI type-checking here
-      // @ts-ignore
-      writeContract({
-        address: CONTRACT_ADDRESS as `0x${string}`,
-        abi: CommandoOrbitABI.abi, 
-        functionName: 'submitGlobalScore',
-        args: [opId, finalScore],
-      });
+      try {
+        setIsSigning(true);
+        console.log("1. Requesting signature from Vercel Referee...");
+        
+        const response = await fetch('/api/sign-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            playerAddress: address,
+            score: finalScore,
+            timeSurvived: 120 // Placeholder for bouncer logic
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Backend rejected the score.");
+        }
+
+        console.log("✅ Signature acquired:", data.signature);
+        console.log("2. Submitting to Monad Blockchain...");
+
+        // @ts-ignore
+        writeContract({
+          address: CONTRACT_ADDRESS as `0x${string}`,
+          abi: CommandoOrbitABI.abi, 
+          functionName: 'submitGlobalScore',
+          args: [opId, finalScore, data.signature], // <-- VIP PASS ADDED HERE
+        });
+
+      } catch (error) {
+        console.error("Submission failed:", error);
+        alert(`Transmission Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+      } finally {
+        setIsSigning(false);
+      }
     }
   };
 
@@ -592,22 +624,23 @@ export default function App() {
               {isConnected && (
                 <button 
                   onClick={handleTransmitScore} 
-                  disabled={isPending || isSuccess || finalScore <= personalBestScore}
+                  disabled={isPending || isSuccess || isSigning || finalScore <= personalBestScore}
                   className={`relative group w-full py-4 border-2 font-black tracking-[0.2em] transition-all
                     ${finalScore <= personalBestScore
                       ? 'border-[#708238]/30 text-[#708238]/50 bg-transparent cursor-not-allowed'
                       : isSuccess 
                       ? 'border-[#a3b86c] bg-[#a3b86c] text-black shadow-[0_0_20px_rgba(163,184,108,0.6)]' 
-                      : isPending 
+                      : (isPending || isSigning) 
                       ? 'border-[#a3b86c] text-[#a3b86c] animate-pulse shadow-[0_0_15px_rgba(163,184,108,0.3)] bg-[#0a0a0a]' 
                       : 'border-[#708238] bg-[#0a0a0a] text-[#a3b86c] hover:bg-[#708238] hover:text-black hover:shadow-[0_0_20px_rgba(112,130,56,0.4)]'}
                   `}
                 >
-                  {!isSuccess && !isPending && finalScore > personalBestScore && (
+                  {!isSuccess && !isPending && !isSigning && finalScore > personalBestScore && (
                     <span className="absolute left-0 top-0 w-2 h-full bg-[#a3b86c] opacity-0 group-hover:opacity-100 transition-opacity"></span>
                   )}
                   {finalScore <= personalBestScore ? '[ NO NEW PR ESTABLISHED ]' :
                    isSuccess ? '[ SECURELY LOGGED ]' : 
+                   isSigning ? '[ ACQUIRING CLEARANCE... ]' :
                    isPending ? '[ TRANSMITTING... ]' : 
                    chainId !== 10143 ? '[ SWITCH TO MONAD ]' :
                    '[ SAVE SCORE ON-CHAIN ]'}

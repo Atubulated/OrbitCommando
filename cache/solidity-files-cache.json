@@ -1,0 +1,77 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "C:\\Users\\Atubulated\\pixel-commando\\contracts\\CommandoOrbit.sol": {
+      "lastModificationDate": 1779123236202,
+      "contentHash": "32ee9c2d29a4eb0cf6fbb27a00cb4a76",
+      "sourceName": "contracts/CommandoOrbit.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "CommandoOrbit"
+      ]
+    },
+    "C:\\Users\\Atubulated\\pixel-commando\\contracts\\CommandoOrbitSecure.sol": {
+      "lastModificationDate": 1779448424293,
+      "contentHash": "646e839c256a448a40f243112c4b73e4",
+      "sourceName": "contracts/CommandoOrbitSecure.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "CommandoOrbitSecure"
+      ]
+    }
+  }
+}
